@@ -36,7 +36,7 @@ export function getHandlers(options: Options) {
     const fnHandler = options ? options[onEventName] : null;
 
     if (typeof fnHandler === 'function') {
-      handlers[eventName] = fnHandler;
+      handlers[eventName] = wrapWithErrorHandler(eventName, fnHandler);
     }
   }
 
@@ -51,6 +51,20 @@ export function getHandlers(options: Options) {
   }
 
   return handlers;
+}
+
+function wrapWithErrorHandler(eventName: string, handler) {
+  if (eventName !== 'proxyReq') {
+    return handler;
+  }
+
+  return function (proxy, req, res, ...args) {
+    try {
+      return handler(proxy, req, res, ...args);
+    } catch (exception) {
+      proxy.destroy(exception);
+    }
+  };
 }
 
 function defaultErrorHandler(err, req: IncomingMessage, res: ServerResponse) {
@@ -69,7 +83,7 @@ function defaultErrorHandler(err, req: IncomingMessage, res: ServerResponse) {
   res.end(`Error occured while trying to proxy: ${host}${req.url}`);
 }
 
-function getErrorCode(code) {
+function getErrorCode(code: string): number {
   if (/HPE_INVALID/.test(code)) {
     return 502;
   }

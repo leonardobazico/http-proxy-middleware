@@ -335,8 +335,14 @@ describe('E2E http-proxy-middleware', () => {
     });
 
     describe('option.onProxyReq', () => {
-      beforeEach(() => {
-        agent = request(
+      it('should add `x-added` as custom header to request"', async () => {
+        let completedRequest: CompletedRequest;
+        await mockTargetServer.get().thenCallback((req) => {
+          completedRequest = req;
+          return { statusCode: 200 };
+        });
+
+        const agent = request(
           createApp(
             createProxyMiddleware('/api', {
               target: `http://localhost:${mockTargetServer.port}`,
@@ -346,18 +352,28 @@ describe('E2E http-proxy-middleware', () => {
             })
           )
         );
-      });
-
-      it('should add `x-added` as custom header to request"', async () => {
-        let completedRequest: CompletedRequest;
-        await mockTargetServer.get().thenCallback((req) => {
-          completedRequest = req;
-          return { statusCode: 200 };
-        });
 
         await agent.get(`/api/foo/bar`).expect(200);
 
         expect(completedRequest.headers['x-added']).toBe('added-from-hpm');
+      });
+
+      it('should handle onProxyReq unexpected error', async () => {
+        const agent = request(
+          createApp(
+            createProxyMiddleware('/api', {
+              target: `http://localhost:${mockTargetServer.port}`,
+              onProxyReq(proxyReq) {
+                proxyReq.setHeader('x-added', undefined);
+              },
+            })
+          )
+        );
+
+        const { status, text } = await agent.get(`/api/foo/bar`);
+
+        expect(text).toContain(`Error occured while trying to proxy:`);
+        expect(status).toStrictEqual(500);
       });
     });
 
